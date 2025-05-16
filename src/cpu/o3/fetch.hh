@@ -578,6 +578,16 @@ class Fetch
         statistics::Distribution nisnDist;
         /** Rate of how often fetch was idle. */
         statistics::Formula idleRate;
+
+        // SpecExec
+        // ===============================================
+        /** Stat for total number of branch instructions */
+        statistics::Scalar branchInsts;
+        /** Stat for total number of branch instructions predicted to be taken */
+        statistics::Scalar takenBranches;
+        /** Stat for total number of branch instructions predicted to be not taken */
+        statistics::Scalar notTakenBranches;
+        // ===============================================
     } fetchStats;
 };
 

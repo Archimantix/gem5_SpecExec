@@ -56,6 +56,7 @@
 #include "debug/Drain.hh"
 #include "debug/IEW.hh"
 #include "debug/O3PipeView.hh"
+#include "debug/SpecExec.hh"   // SpecExec debug flag
 #include "params/BaseO3CPU.hh"
 
 namespace gem5
@@ -414,6 +415,14 @@ IEW::squash(ThreadID tid)
 void
 IEW::squashDueToBranch(const DynInstPtr& inst, ThreadID tid)
 {
+    // SpecExec
+    // ===============================================
+    DPRINTF(SpecExec, "[tid:%i][sn:%llu][PC=0x%x] "
+            "Squashing from PC:0x%x\n",
+            tid, inst->seqNum, inst->pcState().instAddr(),
+            inst->pcState().instAddr());
+    // ===============================================
+
     DPRINTF(IEW, "[tid:%i] [sn:%llu] Squashing from a specific instruction,"
             " PC: %s "
             "\n", tid, inst->seqNum, inst->pcState() );
@@ -1259,6 +1268,24 @@ IEW::executeInsts()
             if (inst->mispredicted() && !loadNotExecuted) {
                 fetchRedirect[tid] = true;
 
+                // SpecExec
+                // ===============================================
+                DPRINTF(SpecExec, "[tid:%i][sn:%llu][PC:0x%x] "
+                    "Branch is resolved in execute stage\n",
+                    tid, inst->seqNum, inst->pcState().instAddr());
+                DPRINTF(SpecExec, "[tid:%i][sn:%llu][PC:0x%x] "
+                        "Branch mispredicted to target PC:0x%x\n",
+                        tid, inst->seqNum, inst->pcState().instAddr(),
+                        inst->readPredTarg().instAddr());
+                DPRINTF(SpecExec, "[tid:%i][sn:%llu][PC:0x%x] "
+                        "Redirecting fetch to PC:0x%x\n",
+                        tid, inst->seqNum, inst->pcState().instAddr(),
+                        inst->pcState().instAddr());
+                DPRINTF(SpecExec, "[tid:%i][sn:%llu][PC:0x%x] "
+                        "Singal commit stage to squash instructions\n",
+                        tid, inst->seqNum, inst->pcState().instAddr());
+                // ===============================================
+
                 DPRINTF(IEW, "[tid:%i] [sn:%llu] Execute: "
                         "Branch mispredict detected.\n",
                         tid, inst->seqNum);
@@ -1278,6 +1305,32 @@ IEW::executeInsts()
                 } else {
                     iewStats.predictedNotTakenIncorrect++;
                 }
+            } else if (inst->isControl() && inst->isExecuted() && !loadNotExecuted) {
+                // SpecExec
+                // ===============================================
+                DPRINTF(SpecExec, "[tid:%i][sn:%llu][PC:0x%x] "
+                    "Branch is resolved correctly in execute stage\n",
+                    tid, inst->seqNum, inst->pcState().instAddr());
+
+                if (inst->readPredTaken()) {
+                    DPRINTF(SpecExec, "[tid:%i][sn:%llu][PC:0x%x] "
+                            "Branch correctly predicted taken to target PC:0x%x\n",
+                            tid, inst->seqNum, inst->pcState().instAddr(),
+                            inst->readPredTarg().instAddr());
+                } else {
+                    DPRINTF(SpecExec, "[tid:%i][sn:%llu][PC:0x%x] "
+                            "Branch correctly predicted not taken\n",
+                            tid, inst->seqNum, inst->pcState().instAddr());
+                }
+
+                DPRINTF(SpecExec, "[tid:%i][sn:%llu][PC:0x%x] "
+                    "Speculation window for this branch is now resolved\n",
+                    tid, inst->seqNum, inst->pcState().instAddr());
+                // ===============================================
+
+                DPRINTF(IEW, "[tid:%i] [sn:%llu] Execute: "
+                        "Branch correctly predicted.\n",
+                        tid, inst->seqNum);
             } else if (ldstQueue.violation(tid)) {
                 assert(inst->isMemRef());
                 // If there was an ordering violation, then get the
@@ -1285,6 +1338,23 @@ IEW::executeInsts()
                 // clears the violation signal.
                 DynInstPtr violator;
                 violator = ldstQueue.getMemDepViolator(tid);
+
+                // SpecExec
+                // ===============================================
+                DPRINTF(SpecExec, "[tid:%i][sn:%llu][PC:0x%x] "
+                    "Memory ordering violation detected for "
+                    "PC:0x%x, Addr:0x%x, sn:%llu\n",
+                    tid, inst->seqNum, inst->pcState().instAddr(),
+                    violator->pcState().instAddr(), inst->physEffAddr, violator->seqNum);
+                DPRINTF(SpecExec, "[tid:%i][sn:%llu][PC:0x%x] "
+                    "Redirecting fetch to PC:0x%x\n",
+                    tid, inst->seqNum, inst->pcState().instAddr(),
+                    violator->pcState());
+                DPRINTF(SpecExec, "[tid:%i][sn:%llu][PC:0x%x] "
+                    "Singal commit stage to squash violator and "
+                    "younger instructions\n",
+                    tid, inst->seqNum, inst->pcState().instAddr());
+                // ===============================================
 
                 DPRINTF(IEW, "LDSTQ detected a violation. Violator PC: %s "
                         "[sn:%lli], inst PC: %s [sn:%lli]. Addr is: %#x.\n",
@@ -1308,6 +1378,23 @@ IEW::executeInsts()
                 assert(inst->isMemRef());
 
                 DynInstPtr violator = ldstQueue.getMemDepViolator(tid);
+
+                // SpecExec
+                // ===============================================
+                DPRINTF(SpecExec, "[tid:%i][sn:%llu][PC:0x%x] "
+                    "Memory ordering violation detected for "
+                    "PC:0x%x, Addr:0x%x, sn:%llu\n",
+                    tid, inst->seqNum, inst->pcState().instAddr(),
+                    violator->pcState().instAddr(), inst->physEffAddr, violator->seqNum);
+                DPRINTF(SpecExec, "[tid:%i][sn:%llu][PC:0x%x] "
+                    "Redirecting fetch to PC:0x%x\n",
+                    tid, inst->seqNum, inst->pcState().instAddr(),
+                    violator->pcState());
+                DPRINTF(SpecExec, "[tid:%i][sn:%llu][PC:0x%x] "
+                    "Violation will not be handled because "
+                    "already squashing\n",
+                    tid, inst->seqNum, inst->pcState().instAddr());
+                // ===============================================
 
                 DPRINTF(IEW, "LDSTQ detected a violation.  Violator PC: "
                         "%s, inst PC: %s.  Addr is: %#x.\n",

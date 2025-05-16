@@ -48,6 +48,7 @@
 #include "debug/Activity.hh"
 #include "debug/Decode.hh"
 #include "debug/O3PipeView.hh"
+#include "debug/SpecExec.hh"    // SpecExec debug flag
 #include "params/BaseO3CPU.hh"
 #include "sim/full_system.hh"
 
@@ -718,6 +719,24 @@ Decode::decodeInsts(ThreadID tid)
             if (*target != inst->readPredTarg()) {
                 ++stats.branchMispred;
 
+                // SpecExec
+                // ===============================================
+                DPRINTF(SpecExec, "[tid:%i][sn:%llu][PC=0x%x] "
+                    "Branch is resolved at decode stage.\n",
+                    tid, inst->seqNum, inst->pcState().instAddr());
+
+                // inst->setBranchResolvedAtDecode(true);
+
+                DPRINTF(SpecExec, "[tid:%i][sn:%llu][PC=0x%x] "
+                        "Branch mispredicted to target PC:0x%x\n",
+                        tid, inst->seqNum, inst->pcState().instAddr(),
+                        inst->readPredTarg().instAddr());
+                DPRINTF(SpecExec, "[tid:%i][sn:%llu][PC=0x%x] "
+                        "Squashing and updating prediction to target PC:0x%x\n",
+                        tid, inst->seqNum, inst->pcState().instAddr(),
+                        target->instAddr());
+                // ===============================================
+
                 // Might want to set some sort of boolean and just do
                 // a check at the end
                 squash(inst, inst->threadNumber);
@@ -730,7 +749,65 @@ Decode::decodeInsts(ThreadID tid)
                 //The micro pc after an instruction level branch should be 0
                 inst->setPredTarg(*target);
                 break;
+            } else {
+                // Branch was correctly predicted and resolved at decode stage
+                // SpecExec
+                // ===============================================
+                DPRINTF(SpecExec, "[tid:%i][sn:%llu][PC=0x%x] "
+                    "Branch is resolved correctly at decode stage.\n",
+                    tid, inst->seqNum, inst->pcState().instAddr());
+
+                // Mark branch as resolved at decode
+                // inst->setBranchResolvedAtDecode(true);
+
+                DPRINTF(SpecExec, "[tid:%i][sn:%llu][PC=0x%x] "
+                        "Branch correctly predicted to target PC:0x%x\n",
+                        tid, inst->seqNum, inst->pcState().instAddr(),
+                        target->instAddr());
+
+                DPRINTF(SpecExec, "[tid:%i][sn:%llu][PC=0x%x] "
+                        "Speculation window for this branch is resolved early at decode stage\n",
+                        tid, inst->seqNum, inst->pcState().instAddr());
+                // ===============================================
+
+                DPRINTF(Decode, "[tid:%i] [sn:%llu] "
+                        "Branch correctly predicted with target: %s\n",
+                        tid, inst->seqNum, *target);
             }
+        } else if (inst->isIndirectCtrl()) {
+            // For indirect control instructions, we can't resolve the branch
+            // target in decode stage
+            // SpecExec
+            // ===============================================
+            DPRINTF(SpecExec, "[tid:%i][sn:%llu][PC=0x%x] "
+                "Indirect branch detected, cannot resolve at decode stage.\n",
+                tid, inst->seqNum, inst->pcState().instAddr());
+
+            DPRINTF(SpecExec, "[tid:%i][sn:%llu][PC=0x%x] "
+                "Speculation window extends to execute stage\n",
+                tid, inst->seqNum, inst->pcState().instAddr());
+            // ===============================================
+
+            DPRINTF(Decode, "[tid:%i] [sn:%llu] "
+                    "Indirect branch must wait for execute stage resolution.\n",
+                    tid, inst->seqNum);
+        } else if (inst->isCondCtrl() && !inst->readPredTaken()) {
+            // For conditional control that is predicted not-taken,
+            // we can't confirm in decode stage
+            // SpecExec
+            // ===============================================
+            DPRINTF(SpecExec, "[tid:%i][sn:%llu][PC=0x%x] "
+                "Conditional branch predicted not-taken, must verify in execute stage.\n",
+                tid, inst->seqNum, inst->pcState().instAddr());
+
+            DPRINTF(SpecExec, "[tid:%i][sn:%llu][PC=0x%x] "
+                "Speculation window extends to execute stage\n",
+                tid, inst->seqNum, inst->pcState().instAddr());
+            // ===============================================
+
+            DPRINTF(Decode, "[tid:%i] [sn:%llu] "
+                    "Conditional branch (pred not-taken) must wait for execute stage.\n",
+                    tid, inst->seqNum);
         }
     }
 

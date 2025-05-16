@@ -94,7 +94,7 @@ thispath = os.path.dirname(os.path.realpath(__file__))
 binary = os.path.join(
     thispath,
     "../../../",
-    "tests/test-progs/hello/bin/x86/linux/hello",
+    "tests/test-progs/tests/specexec_test",
 )
 
 system.workload = SEWorkload.init_compatible(binary)

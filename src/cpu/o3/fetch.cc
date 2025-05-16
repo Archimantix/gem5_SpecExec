@@ -60,6 +60,7 @@
 #include "debug/Fetch.hh"
 #include "debug/O3CPU.hh"
 #include "debug/O3PipeView.hh"
+#include "debug/SpecExec.hh"    // SpecExec debug flag
 #include "mem/packet.hh"
 #include "params/BaseO3CPU.hh"
 #include "sim/byteswap.hh"
@@ -193,7 +194,16 @@ Fetch::FetchStatGroup::FetchStatGroup(CPU *cpu, Fetch *fetch)
              "Number of instructions fetched each cycle (Total)"),
     ADD_STAT(idleRate, statistics::units::Ratio::get(),
              "Ratio of cycles fetch was idle",
-             idleCycles / cpu->baseStats.numCycles)
+             idleCycles / cpu->baseStats.numCycles),
+    // SpecExec
+    // ===============================================
+    ADD_STAT(branchInsts, statistics::units::Count::get(),
+             "Number of branch instructions"),
+    ADD_STAT(takenBranches, statistics::units::Count::get(),
+             "Number of branch instructions predicted to be taken"),
+    ADD_STAT(notTakenBranches, statistics::units::Count::get(),
+             "Number of branch instructions predicted to be not taken")
+    // ===============================================
 {
         predictedBranches
             .prereq(predictedBranches);
@@ -232,6 +242,15 @@ Fetch::FetchStatGroup::FetchStatGroup(CPU *cpu, Fetch *fetch)
             .flags(statistics::pdf);
         idleRate
             .prereq(idleRate);
+
+        // SpecExec
+        // ===============================================
+        branchInsts
+            .prereq(branchInsts);
+        takenBranches
+            .prereq(takenBranches);
+        notTakenBranches
+            .prereq(notTakenBranches);
 }
 void
 Fetch::setTimeBuffer(TimeBuffer<TimeStruct> *time_buffer)
@@ -497,18 +516,48 @@ Fetch::lookupAndUpdateNextPC(const DynInstPtr &inst, PCStateBase &next_pc)
     }
 
     ThreadID tid = inst->threadNumber;
+
+    // SpecExec
+    // ===============================================
+    ++fetchStats.branchInsts;
+    DPRINTF(SpecExec, "[tid:%i][sn:%llu][PC=0x%x] "
+            "Branch instruction detected\n",
+            tid, inst->seqNum, inst->pcState().instAddr());
+    // ===============================================
+
     predict_taken = branchPred->predict(inst->staticInst, inst->seqNum,
                                         next_pc, tid);
 
     if (predict_taken) {
+        // SpecExec
+        // ===============================================
+        DPRINTF(SpecExec, "[tid:%i][sn:%llu][PC=0x%x] "
+            "Branch predicted to be taken to PC:0x%x\n",
+            tid, inst->seqNum, inst->pcState().instAddr(),
+            next_pc.instAddr());
+        // ===============================================
+
         DPRINTF(Fetch, "[tid:%i] [sn:%llu] Branch at PC %#x "
                 "predicted to be taken to %s\n",
                 tid, inst->seqNum, inst->pcState().instAddr(), next_pc);
     } else {
+        // SpecExec
+        // ===============================================
+        DPRINTF(SpecExec, "[tid:%i][sn:%llu][PC=0x%x] "
+            "Branch predicted to be not taken to PC:0x%x\n",
+            tid, inst->seqNum, inst->pcState().instAddr(),
+            next_pc.instAddr());
+        // ===============================================
         DPRINTF(Fetch, "[tid:%i] [sn:%llu] Branch at PC %#x "
                 "predicted to be not taken\n",
                 tid, inst->seqNum, inst->pcState().instAddr());
     }
+    // SpecExec
+    // ===============================================
+    DPRINTF(SpecExec, "[tid:%i][sn:%llu][PC=0x%x] "
+        "Start of the speculation window\n",
+        tid, inst->seqNum, inst->pcState().instAddr());
+    // ===============================================
 
     DPRINTF(Fetch, "[tid:%i] [sn:%llu] Branch at PC %#x "
             "predicted to go to %s\n",

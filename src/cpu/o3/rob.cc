@@ -47,6 +47,7 @@
 #include "cpu/o3/limits.hh"
 #include "debug/Fetch.hh"
 #include "debug/ROB.hh"
+#include "debug/SpecExec.hh"     // SpecExec debug flag
 #include "params/BaseO3CPU.hh"
 
 namespace gem5
@@ -205,6 +206,15 @@ ROB::insertInst(const DynInstPtr &inst)
     assert(numInstsInROB != numEntries);
 
     ThreadID tid = inst->threadNumber;
+
+    // SpecExec
+    // ===============================================
+    if (inst->isControl()) {
+        DPRINTF(SpecExec, "[tid:%i][sn:%llu][PC=0x%x] "
+                "Adding branch instruction to the ROB.\n",
+                tid, inst->seqNum, inst->pcState().instAddr());
+    }
+    // ===============================================
 
     instList[tid].push_back(inst);
 
